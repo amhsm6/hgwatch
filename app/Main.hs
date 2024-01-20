@@ -35,27 +35,29 @@ scan = S.fromList <$> list
 
 watch :: S.Set File -> IO ()
 watch prev = do
-    curr <- scan
+    curr <- liftIO scan
 
-    let changed = S.difference curr prev
-    unless (S.null changed) $ putStrLn $ S.showTree changed
+    let changed = S.elems $ S.difference curr prev
+    forM_ changed $ \file -> do
+        liftIO $ print file
 
     watch curr
 
 loop :: Action ()
 loop = do
-    x <- recv >>= unwrap >>= pure . fst
+    x <- recv
     case x of
-        GR.Update (U.UpdateAuthorizationState (Just state)) -> auth state
+        Just (GR.Update (U.UpdateAuthorizationState (Just state)), _) -> auth state
         _ -> pure ()
 
 main :: IO ()
 main = do
     initial <- scan
-    fresh $ do
+    watch initial
+    {-fresh $ do
         send $ SetLogVerbosityLevel $ Just 2
 
         x <- ask
-        liftIO $ forkIO $ void $ runAction x $ liftIO $ watch initial
+        liftIO $ forkIO $ void $ runAction x $ watch initial
 
-        inf loop
+        inf loop-}
