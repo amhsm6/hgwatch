@@ -5,12 +5,15 @@ import Control.Monad.Reader
 import Control.Monad.List
 import Control.Concurrent
 import qualified Data.Set as S
+import qualified Data.Text as T
 import Data.Time
 import System.FilePath
 import System.Directory
 import qualified TD.GeneralResult as GR
 import qualified TD.Data.Update as U
+import qualified TD.Data.Chats as CS
 import TD.Query.SetLogVerbosityLevel
+import TD.Query.SearchChatsOnServer
 
 import Action
 import Init
@@ -33,7 +36,7 @@ scan = S.fromList <$> list
               time <- liftIO $ getModificationTime path
               pure $ File path time
 
-watch :: S.Set File -> IO ()
+watch :: S.Set File -> Action ()
 watch prev = do
     curr <- liftIO scan
 
@@ -43,21 +46,22 @@ watch prev = do
 
     watch curr
 
-loop :: Action ()
-loop = do
-    x <- recv
-    case x of
-        Just (GR.Update (U.UpdateAuthorizationState (Just state)), _) -> auth state
-        _ -> pure ()
-
 main :: IO ()
 main = do
     initial <- scan
-    watch initial
-    {-fresh $ do
+    fresh $ do
         send $ SetLogVerbosityLevel $ Just 2
+        auth
 
-        x <- ask
-        liftIO $ forkIO $ void $ runAction x $ watch initial
+        send $ SearchChatsOnServer (Just $ T.pack "Saved Messages") $ Just 1
+        let getChat = do
+                liftIO $ putStrLn "Trying.."
+                x <- recv
+                liftIO $ print $ fst <$> x
+                case x of
+                    Just (GR.Chats (CS.Chats (Just 1) (Just [id])), _) -> pure id
+                    Just (GR.Chats _, _) -> end
+                    _ -> getChat
+        id <- getChat
 
-        inf loop-}
+        liftIO $ print id

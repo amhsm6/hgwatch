@@ -7,6 +7,8 @@ import Control.Monad.Trans
 import qualified Data.Text as T
 import System.Environment
 import TD.Lib (create)
+import TD.GeneralResult
+import TD.Data.Update
 import TD.Data.AuthorizationState
 import TD.Query.SetTdlibParameters
 import TD.Query.SetAuthenticationPhoneNumber
@@ -17,8 +19,16 @@ import Action
 fresh :: Action a -> IO ()
 fresh m = create >>= \x -> void $ runAction x m
 
-auth :: AuthorizationState -> Action ()
-auth AuthorizationStateWaitTdlibParameters = do
+auth :: Action ()
+auth = do
+    x <- recv
+    case x of
+        Just (Update (UpdateAuthorizationState (Just AuthorizationStateReady)), _) -> pure ()
+        Just (Update (UpdateAuthorizationState (Just state)), _) -> exec state >> auth
+        _ -> auth
+
+exec :: AuthorizationState -> Action ()
+exec AuthorizationStateWaitTdlibParameters = do
     apiId <- liftIO $ getEnv "API_ID"
     apiHash <- liftIO $ getEnv "API_HASH"
     send $ defaultSetTdlibParameters { database_directory = Just $ T.pack "db"
@@ -28,16 +38,16 @@ auth AuthorizationStateWaitTdlibParameters = do
                                      , system_language_code = Just $ T.pack "en"
                                      , application_version = Just $ T.pack "1.0.0"
                                      }
-auth AuthorizationStateWaitPhoneNumber = do
+exec AuthorizationStateWaitPhoneNumber = do
     phone <- liftIO $ getEnv "PHONE_NUMBER"
     send $ defaultSetAuthenticationPhoneNumber { phone_number = Just $ T.pack phone }
-auth x@(AuthorizationStateWaitCode _) = do
+exec x@(AuthorizationStateWaitCode _) = do
     liftIO $ putStrLn "Type authentication code"
     code <- liftIO $ getLine
-    when (null code) $ liftIO (putStrLn "Wrong code") >> auth x
+    when (null code) $ liftIO (putStrLn "Wrong code") >> exec x
     send $ CheckAuthenticationCode { code = Just $ T.pack code }
-auth AuthorizationStateReady = pure ()
-auth x = do
+exec AuthorizationStateReady = pure ()
+exec x = do
     liftIO $ putStrLn $ concat [ "Unknown Authorization State:\n"
                                , show x
                                , "\n --> Skipping"
