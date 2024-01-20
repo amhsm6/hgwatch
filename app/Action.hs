@@ -4,23 +4,22 @@ module Action
     ( Action, runAction
     , unwrap, end, inf, Checkable, check
     , send, recv
-    , liftIO
     ) where
 
 import Control.Monad
 import Control.Monad.Reader
-import Control.Monad.Trans.Maybe
+import Control.Monad.Except
 import Data.Aeson (ToJSON)
 import qualified TD.Lib as TDL
 import qualified TD.GeneralResult as TDL
 
-type Action = ReaderT TDL.Client (MaybeT IO)
+type Action = ReaderT TDL.Client (ExceptT () IO)
 
 runAction :: TDL.Client -> Action a -> IO (Maybe a)
-runAction client act = runMaybeT $ runReaderT act client
+runAction client act = either (const Nothing) Just <$> runExceptT (runReaderT act client)
 
 unwrap :: Maybe a -> Action a
-unwrap = ReaderT . const . MaybeT . pure
+unwrap = ReaderT . const . ExceptT . pure . maybe (Left ()) Right
 
 end :: Action a
 end = unwrap Nothing

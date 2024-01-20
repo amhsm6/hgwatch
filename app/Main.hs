@@ -1,7 +1,10 @@
 module Main where
 
 import Control.Monad
+import Control.Monad.Reader
 import Control.Monad.List
+import Control.Concurrent
+import qualified Data.Set as S
 import Data.Time
 import System.FilePath
 import System.Directory
@@ -13,29 +16,31 @@ import Action
 import Init
 
 searchDirs :: [FilePath]
-searchDirs = ["/opt/Heroes3/games"]
+searchDirs = ["/home/amhsm6/tmp"]
 
 data File = File { location :: FilePath
                  , savedTime :: UTCTime
                  }
-                 deriving Show
+                 deriving (Eq, Ord, Show)
 
-scan :: IO [File]
-scan = runListT $ do
-    dir <- fromList searchDirs
-    file <- ListT $ listDirectory dir
-    let path = dir </> file
+scan :: IO (S.Set File)
+scan = S.fromList <$> list
+    where list = runListT $ do
+              dir <- fromList searchDirs
+              file <- ListT $ listDirectory dir
+              let path = dir </> file
 
-    time <- liftIO $ getModificationTime path
-    pure $ File path time
+              time <- liftIO $ getModificationTime path
+              pure $ File path time
 
-{-watch :: Action ()
-watch = do
+watch :: S.Set File -> IO ()
+watch prev = do
     curr <- scan
-    prev <- atomically $ readTVar state
-    let changed = filter (\(x, y) -> savedTime x > savedTime y) $ zip curr prev
-    forM_ changed $ \(new, _) -> do
-        print $ location new-}
+
+    let changed = S.difference curr prev
+    unless (S.null changed) $ putStrLn $ S.showTree changed
+
+    watch curr
 
 loop :: Action ()
 loop = do
@@ -45,6 +50,12 @@ loop = do
         _ -> pure ()
 
 main :: IO ()
-main = fresh $ do
-    send $ SetLogVerbosityLevel $ Just 2
-    inf loop
+main = do
+    initial <- scan
+    fresh $ do
+        send $ SetLogVerbosityLevel $ Just 2
+
+        x <- ask
+        liftIO $ forkIO $ void $ runAction x $ liftIO $ watch initial
+
+        inf loop
