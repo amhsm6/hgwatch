@@ -7,12 +7,12 @@ maintainer:         amhsm6@gmail.com
 executable hgwatch
     main-is:          Main.hs
 
-    other-modules:    Control.Monad.List
-                      Action
+    other-modules:    Action
                       Init
 
     build-depends:    base ^>=4.16.4.0
                     , mtl
+                    , list-t
                     , containers
                     , text
                     , time

@@ -1,5 +1,5 @@
 module Init
-    ( fresh, auth
+    ( start, auth
     ) where
 
 import Control.Monad
@@ -16,8 +16,8 @@ import TD.Query.CheckAuthenticationCode
 
 import Action
 
-fresh :: Action a -> IO ()
-fresh m = create >>= \x -> void $ runAction x m
+start :: Action a -> IO ()
+start m = create >>= \x -> void $ runAction x m
 
 auth :: Action ()
 auth = do
@@ -42,14 +42,11 @@ exec AuthorizationStateWaitPhoneNumber = do
     phone <- liftIO $ getEnv "PHONE_NUMBER"
     send $ defaultSetAuthenticationPhoneNumber { phone_number = Just $ T.pack phone }
 exec x@(AuthorizationStateWaitCode _) = do
-    liftIO $ putStrLn "Type authentication code"
+    liftIO $ putStrLn "type authentication code"
     code <- liftIO $ getLine
     when (null code) $ liftIO (putStrLn "Wrong code") >> exec x
     send $ CheckAuthenticationCode { code = Just $ T.pack code }
 exec AuthorizationStateReady = pure ()
 exec x = do
-    liftIO $ putStrLn $ concat [ "Unknown Authorization State:\n"
-                               , show x
-                               , "\n --> Skipping"
-                               ]
-    end
+    liftIO $ putStrLn $ "error: unknown authorization state:\n" ++ show x
+    mzero

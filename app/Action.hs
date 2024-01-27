@@ -2,7 +2,7 @@
 
 module Action
     ( Action, runAction
-    , unwrap, end, inf, Checkable, check
+    , unwrap, inf, Checkable, check
     , send, recv
     ) where
 
@@ -16,19 +16,17 @@ import qualified TD.GeneralResult as TDL
 type Action = ReaderT TDL.Client (ExceptT () IO)
 
 runAction :: TDL.Client -> Action a -> IO (Maybe a)
-runAction client act = either (const Nothing) Just <$> runExceptT (runReaderT act client)
+runAction client m = either (const Nothing) Just <$> runExceptT (runReaderT m client)
 
 unwrap :: Maybe a -> Action a
-unwrap = ReaderT . const . ExceptT . pure . maybe (Left ()) Right
-
-end :: Action a
-end = unwrap Nothing
+unwrap Nothing = mzero
+unwrap (Just x) = pure x
 
 inf :: Action a -> Action b
-inf act = do
+inf m = do
     x <- ask
-    liftIO $ runAction x act
-    inf act
+    liftIO $ runAction x m
+    inf m
 
 class Checkable a where
     check :: a -> Action ()

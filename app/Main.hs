@@ -2,8 +2,8 @@ module Main where
 
 import Control.Monad
 import Control.Monad.Reader
-import Control.Monad.List
 import Control.Concurrent
+import ListT
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Data.Time
@@ -18,11 +18,15 @@ import qualified TD.Data.FormattedText as FT
 import qualified TD.Query.SetLogVerbosityLevel as SLVL
 import qualified TD.Query.GetMe as GM
 import qualified TD.Query.CreatePrivateChat as CPC
-import qualified TD.Query.GetChatHistory as GCH
 import qualified TD.Query.SendMessage as SM
 
 import Action
 import Init
+
+fromFoldableM :: Monad m => m [a] -> ListT m a
+fromFoldableM = unfoldM $ \m -> m >>= f
+    where f [] = pure Nothing
+          f (x:xs) = pure $ Just (x, pure xs)
 
 searchDirs :: [FilePath]
 searchDirs = ["/home/amhsm6/tmp"]
@@ -34,15 +38,15 @@ data File = File { location :: FilePath
 
 scan :: IO (S.Set File)
 scan = S.fromList <$> list
-    where list = runListT $ do
-              dir <- fromList searchDirs
-              file <- ListT $ listDirectory dir
+    where list = toList $ do
+              dir <- fromFoldable searchDirs
+              file <- fromFoldableM $ listDirectory dir
               let path = dir </> file
 
               time <- liftIO $ getModificationTime path
               pure $ File path time
 
-watch :: S.Set File -> Action ()
+watch :: S.Set File -> IO ()
 watch prev = do
     curr <- liftIO scan
 
@@ -55,7 +59,8 @@ watch prev = do
 main :: IO ()
 main = do
     initial <- scan
-    fresh $ do
+    watch initial
+    {-start $ do
         send $ SLVL.SetLogVerbosityLevel $ Just 2
         auth
 
@@ -77,16 +82,6 @@ main = do
 
         liftIO $ print id
 
-        send $ GCH.defaultGetChatHistory { GCH.chat_id = Just id, GCH.from_message_id = Just 0, GCH.offset = Just (-30), GCH.limit = Just 60 }
-        let getHistory = do
-                x <- recv
-                case x of
-                    Just (GR.Messages msgs, _) -> pure msgs
-                    _ -> getHistory
-        msgs <- getHistory
-
-        liftIO $ print msgs
-
-        {-send $ SM.defaultSendMessage { SM.chat_id = Just id
-                                  , SM.input_message_content = Just $ IMC.InputMessageText (Just $ FT.defaultFormattedText { FT.text = Just $ T.pack "111" }) Nothing Nothing
-                                  }-}
+        send $ SM.defaultSendMessage { SM.chat_id = Just id
+                                     , SM.input_message_content = Just $ IMC.InputMessageText (Just $ FT.defaultFormattedText { FT.text = Just $ T.pack "111" }) Nothing Nothing
+                                     }-}
