@@ -2,13 +2,14 @@
 
 module Action
     ( Action, runAction
-    , unwrap, inf, Checkable, check
+    , unwrap, inf, fork, Checkable, check
     , send, recv
     ) where
 
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.Except
+import Control.Concurrent
 import Data.Aeson (ToJSON)
 import qualified TD.Lib as TDL
 import qualified TD.GeneralResult as TDL
@@ -27,6 +28,9 @@ inf m = do
     x <- ask
     liftIO $ runAction x m
     inf m
+
+fork :: Action () -> Action ()
+fork m = ask >>= \x -> void $ liftIO $ forkIO $ void $ runAction x m
 
 class Checkable a where
     check :: a -> Action ()
