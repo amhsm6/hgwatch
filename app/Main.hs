@@ -17,10 +17,16 @@ import qualified TD.Data.InputFile as IF
 import qualified TD.Data.FormattedText as FT
 import qualified TD.Data.InputMessageContent as IMC
 import qualified TD.Data.Update as U
+import qualified TD.Data.Message as M
+import qualified TD.Data.MessageContent as MC
+import qualified TD.Data.Document as D
+import qualified TD.Data.File as F
+import qualified TD.Data.RemoteFile as RF
 import qualified TD.Query.SetLogVerbosityLevel as SLVL
 import qualified TD.Query.GetMe as GM
 import qualified TD.Query.CreatePrivateChat as CPC
 import qualified TD.Query.SendMessage as SM
+import qualified TD.Query.DownloadFile as DF
 
 import Action
 import Init
@@ -93,8 +99,27 @@ watchRemote id = inf $ do
     liftIO $ threadDelay 1000
     x <- recv
     case x of
-        Just (GR.Update (U.UpdateNewMessage (Just msg)), _) -> pure ()
-            --unless (M.chat_id msg == Just id) mzero
+        Just (GR.Update (U.UpdateNewMessage (Just msg)), _) -> do
+            unless (M.chat_id msg == Just id) mzero
+
+            (id, path) <- case M.content msg of
+                               Just (MC.MessageDocument (Just (D.Document _ _ _ _ (Just (F.File (Just id) _ _ _ _)))) (Just (FT.FormattedText (Just caption) _))) ->
+                                   case words $ T.unpack caption of
+                                       ["hgwatch", path] -> pure (id, path)
+                                       _ -> mzero
+                               _ -> mzero
+
+            send $ DF.defaultDownloadFile { DF.file_id = Just id, DF.priority = Just 32, DF.synchronous = Just True }
+            liftIO $ threadDelay 100000
+            let getFile = do
+                    x <- recv
+                    liftIO $ print $ fst <$> x
+                    case x of
+                        Just (GR.File _ _ _ (Just )), _) -> 
+                        _ -> getFile
+            file <- getFile
+
+            liftIO $ putStrLn "done"
         _ -> pure ()
 
 main :: IO ()
