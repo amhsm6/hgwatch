@@ -29,8 +29,8 @@ inf m = do
     liftIO $ runAction x m
     inf m
 
-fork :: Action () -> Action ()
-fork m = ask >>= \x -> void $ liftIO $ forkIO $ void $ runAction x m
+fork :: Action () -> Action ThreadId
+fork m = ask >>= \x -> liftIO $ forkIO $ void $ runAction x m
 
 class Checkable a where
     check :: a -> Action ()

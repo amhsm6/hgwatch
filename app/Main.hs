@@ -2,6 +2,7 @@ module Main where
 
 import Control.Monad
 import Control.Monad.Reader
+import Control.Concurrent.STM
 import Control.Concurrent
 import ListT
 import qualified Data.Set as S
@@ -21,7 +22,7 @@ import qualified TD.Data.Message as M
 import qualified TD.Data.MessageContent as MC
 import qualified TD.Data.Document as D
 import qualified TD.Data.File as F
-import qualified TD.Data.RemoteFile as RF
+import qualified TD.Data.LocalFile as LC
 import qualified TD.Query.SetLogVerbosityLevel as SLVL
 import qualified TD.Query.GetMe as GM
 import qualified TD.Query.CreatePrivateChat as CPC
@@ -84,7 +85,7 @@ watchLocal id prev = do
 
     let changed = S.elems $ S.difference curr prev
     forM_ changed $ \file -> do
-        liftIO $ putStrLn $ "Updated: " ++ location file
+        liftIO $ putStrLn $ "Local update: " ++ location file
         let document = IF.InputFileLocal $ Just $ T.pack $ location file
             caption = FT.defaultFormattedText { FT.text = Just $ T.pack $ "hgwatch " ++ location file }
             content = IMC.InputMessageDocument (Just document) Nothing (Just True) (Just caption)
@@ -109,17 +110,17 @@ watchRemote id = inf $ do
                                        _ -> mzero
                                _ -> mzero
 
+            liftIO $ putStrLn $ "Remote update: " ++ path
+
             send $ DF.defaultDownloadFile { DF.file_id = Just id, DF.priority = Just 32, DF.synchronous = Just True }
-            liftIO $ threadDelay 100000
             let getFile = do
                     x <- recv
-                    liftIO $ print $ fst <$> x
                     case x of
-                        Just (GR.File _ _ _ (Just )), _) -> 
+                        Just (GR.File (F.File _ _ _ (Just (LC.LocalFile (Just path) (Just True) _ _ (Just True) _ _ _)) _), _) -> pure $ T.unpack path
                         _ -> getFile
             file <- getFile
 
-            liftIO $ putStrLn "done"
+            pure ()
         _ -> pure ()
 
 main :: IO ()
@@ -130,5 +131,5 @@ main = do
         auth
         id <- getSavedMessages
 
-        fork $ watchRemote id
-        watchLocal id initial
+        fork $ watchLocal id initial
+        watchRemote id thread
